@@ -1,0 +1,55 @@
+#!/usr/bin/env ruby
+
+require 'rest-core'
+require 'clap'
+
+module RestCore
+  headers = {}
+  args = ::Clap.run ARGV,
+    '-H' => ->(v){
+      key, value = v.split(': ', 2)
+      headers[key] = value
+    }
+
+  Down = RestBuilder::Builder.client do
+    use Defaults, {playlist_url: args[0], output: args[1]}
+    use DefaultSite, File.dirname(args[0])
+    use DefaultHeaders, headers
+    use ErrorHandler  , ->(res){puts "Error: #{res}"}
+    use ErrorDetectorHttp
+  end
+
+  Down.pool_size = 8
+  Down.pool_idle_time = 60
+end
+
+d = RestCore::Down.new
+
+output = d.defaults[:output]
+paths = []
+
+d.get(
+  d.defaults[:playlist_url]
+).each_line do |url|
+  next if url.start_with? '#'
+
+  url = url.chomp
+
+  path = ".#{output}#{File.basename(url)}"
+  paths << path
+
+  d.get(url, {}, headers: {'Accept-Encoding' => 'identity'}) do |data|
+    IO.write(
+      path, data, 0,
+      mode: 'w', encoding: data.encoding
+    )
+  end
+end
+
+RestCore::Down.wait
+
+File.open(output, 'ab') do |t|
+  paths.each do |f|
+    IO.copy_stream(f, t)
+  end
+end

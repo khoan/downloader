@@ -35,7 +35,7 @@ d.get(
 
   url = url.chomp
 
-  path = ".#{output}#{File.basename(url)}"
+  path = ".#{output}-#{File.basename(url)}"
   paths << path
 
   d.get(url, {}, headers: {'Accept-Encoding' => 'identity'}) do |data|

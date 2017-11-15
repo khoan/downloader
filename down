@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+start = Time.now
+
 require 'rest-core'
 require 'clap'
 
@@ -19,7 +21,7 @@ module RestCore
     use ErrorDetectorHttp
   end
 
-  Down.pool_size = 8
+  Down.pool_size = 6
   Down.pool_idle_time = 60
 end
 
@@ -35,14 +37,16 @@ d.get(
 
   url = url.chomp
 
-  path = ".#{output}-#{File.basename(url)}"
+  path = ".#{output}--#{File.basename(url)}"
   paths << path
 
-  d.get(url, {}, headers: {'Accept-Encoding' => 'identity'}) do |data|
-    IO.write(
-      path, data, 0,
-      mode: 'w', encoding: data.encoding
-    )
+  unless File.exist? path
+    d.get(url, {}, headers: {'Accept-Encoding' => 'identity'}) do |data|
+      IO.write(
+        path, data, 0,
+        mode: 'w', encoding: data.encoding
+      )
+    end
   end
 end
 
@@ -53,3 +57,5 @@ File.open(output, 'ab') do |t|
     IO.copy_stream(f, t)
   end
 end
+
+puts "Took #{Time.now - start}s"

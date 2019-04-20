@@ -14,21 +14,27 @@ module RestCore
     }
 
   Down = RestBuilder::Builder.client do
-    use Defaults, {playlist_url: args[0], output: args[1]}
+    use Defaults, {playlist_url: args[0], output: args[1], scheme: args[0][/https?:/]}
     use DefaultSite, File.dirname(args[0])
     use DefaultHeaders, headers
     use ErrorHandler  , ->(res){puts "Error: #{res}"}
     use ErrorDetectorHttp
+    use FollowRedirect, 10
   end
 
-  Down.pool_size = 6
+  # pool_size should be at least be larger than 4, or it might be very likely to have deadlock
+  # setting pool_size to -1 to make blocking requests, without spawning any threads
+  Down.pool_size = -1 
   Down.pool_idle_time = 60
 end
 
 d = RestCore::Down.new
 
+raise "Missing output file name" unless d.defaults[:output]
+
 output = d.defaults[:output]
 paths = []
+downloaded = 0
 
 d.get(
   d.defaults[:playlist_url]
@@ -40,17 +46,25 @@ d.get(
   path = ".#{output}--#{File.basename(url)}"
   paths << path
 
-  unless File.exist? path
+  url = "#{d.defaults[:scheme]}#{url}" if url.start_with? '//'
+
+  if File.exist? path
+    downloaded += 1
+  else
     d.get(url, {}, headers: {'Accept-Encoding' => 'identity'}) do |data|
+      downloaded += 1
       IO.write(
         path, data, 0,
         mode: 'w', encoding: data.encoding
       )
+      print "\rdownloaded #{downloaded}/#{paths.size}"
     end
   end
 end
 
+puts "downloading #{paths.size} parts"
 RestCore::Down.wait
+puts "assembling #{paths.size} parts"
 
 File.open(output, 'ab') do |t|
   paths.each do |f|

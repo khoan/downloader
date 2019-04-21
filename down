@@ -19,7 +19,7 @@ module RestCore
     use DefaultHeaders, headers
     use ErrorHandler  , ->(res){puts "Error: #{res}"}
     use ErrorDetectorHttp
-    use FollowRedirect, 10
+    #use FollowRedirect, 10
   end
 
   # pool_size should be at least be larger than 4, or it might be very likely to have deadlock
@@ -33,42 +33,51 @@ d = RestCore::Down.new
 raise "Missing output file name" unless d.defaults[:output]
 
 output = d.defaults[:output]
-paths = []
-downloaded = 0
 
+list = []
 d.get(
   d.defaults[:playlist_url]
 ).each_line do |url|
   next if url.start_with? '#'
 
   url = url.chomp
+  url = "#{d.defaults[:scheme]}#{url}" if url.start_with? '//'
+  response = d.request_full(
+    RestCore::REQUEST_METHOD => :head,
+    RestCore::REQUEST_PATH => url
+  )
+  if [301, 302, 303, 307].include? Integer(response[RestCore::RESPONSE_STATUS])
+    url = response[RestCore::RESPONSE_HEADERS]['LOCATION']
+  end
 
   path = ".#{output}--#{File.basename(url)}"
-  paths << path
 
-  url = "#{d.defaults[:scheme]}#{url}" if url.start_with? '//'
+  list << {path: path, url: url}
+end
+list.uniq!
 
-  if File.exist? path
+downloaded = 0
+puts "downloading #{list.size} parts..."
+list.each do |part|
+  if File.exist? part[:path]
     downloaded += 1
   else
-    d.get(url, {}, headers: {'Accept-Encoding' => 'identity'}) do |data|
+    d.get(part[:url], {}, headers: {'Origin' => 'null', 'Accept-Encoding' => 'identity'}) do |data|
       downloaded += 1
       IO.write(
-        path, data, 0,
+        part[:path], data, 0,
         mode: 'w', encoding: data.encoding
       )
-      print "\rdownloaded #{downloaded}/#{paths.size}"
+      print "\rdownloaded #{downloaded}/#{list.size}"
     end
   end
 end
-
-puts "downloading #{paths.size} parts"
 RestCore::Down.wait
-puts "assembling #{paths.size} parts"
 
+puts "assembling parts..."
 File.open(output, 'ab') do |t|
-  paths.each do |f|
-    IO.copy_stream(f, t)
+  list.each do |part|
+    IO.copy_stream(part[:path], t)
   end
 end
 

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+i=0
+files=""
+for file in `grep googleusercontent how-to-train-your-dragon-3.m3u8 | uniq`; do
+  file=`basename $file`
+  file=".how-to-train-your-dragon-3.mp4--$file"
+  if [ -f $file ]; then
+    i=$((i + 1))
+    echo $i $file
+    target=".how-to-train-your-dragon-3.mp4.$i"
+    files="$files $target"
+    openssl aes-128-cbc -K d3f4dd5d894fcca8a027fd58ae631c39 -iv b1d4330ed16cf97e8a9c73c802bd4f1b -nosalt -in $file -d > $target
+  else
+    echo $file not found
+  fi
+done
+
+cat $files > how-to-train-your-dragon-3.mp4
+# echo $files | xargs cat > how-to-train-your-dragon-3.mp4

@@ -1,0 +1,19 @@
+#!/usr/bin/env ruby
+
+# usage:
+#
+#   ./clean how-to-train-your-dragon-2-list.m3u8 > how-to-train-your-dragon-2-clean.m3u8
+#   ffmpeg -i how-to-train-your-dragon-2-clean.m3u8 -c copy how-to-train-your-dragon-2.ts
+
+File.open(ARGV[0]).each do |line|
+  if line.start_with? 'https:'
+    file = ".how-to-train-your-dragon-2.mp4--#{File.basename(line).chomp}"
+    if File.exist? file
+      puts file
+    else
+      raise "missing #{file}"
+    end
+  else
+    print line
+  end
+end

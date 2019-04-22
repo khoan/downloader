@@ -1,5 +1,9 @@
 #!/usr/bin/env ruby
 
+# usage:
+#
+#   ./down 'https://hls.hydrax.net/7UOKE2j8ei2LnznWRzbYVtT5Wd9PD3nY7SexLSCFLS7F7m/0/235cfe3615d4ab70db352d42f8b52cdf.m3u8' -H 'Accept: */*' -H 'Connection: keep-alive' -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1 Safari/605.1.15' -H 'Accept-Language: en-au' -H 'Referer: https://khoai.tv/' -H 'Accept-Encoding: gzip' -H 'X-Playback-Session-Id: 25554F89-A21C-46E4-9AE6-CE18F58B7C69' how-to-train-your-dragon.mp4
+
 start = Time.now
 
 require 'rest-core'
@@ -14,7 +18,11 @@ module RestCore
     }
 
   Down = RestBuilder::Builder.client do
-    use Defaults, {playlist_url: args[0], output: args[1], scheme: args[0][/https?:/]}
+    use Defaults, {
+      playlist_url: args[0],
+      output: args[1],
+      scheme: args[0][/https?:/]
+    }
     use DefaultSite, File.dirname(args[0])
     use DefaultHeaders, headers
     use ErrorHandler  , ->(res){puts "Error: #{res}"}
@@ -34,30 +42,37 @@ raise "Missing output file name" unless d.defaults[:output]
 
 output = d.defaults[:output]
 
+print 'gathering parts...'
 list = []
-d.get(
-  d.defaults[:playlist_url]
-).each_line do |url|
-  next if url.start_with? '#'
+File.open("#{File.basename(d.defaults[:output])}.m3u8", "w") do |playlist|
+  d.get(
+    d.defaults[:playlist_url]
+  ).each_line do |url|
+    if url.start_with? '#'
+      playlist.puts url
+      next
+    end
 
-  url = url.chomp
-  url = "#{d.defaults[:scheme]}#{url}" if url.start_with? '//'
-  response = d.request_full(
-    RestCore::REQUEST_METHOD => :head,
-    RestCore::REQUEST_PATH => url
-  )
-  if [301, 302, 303, 307].include? Integer(response[RestCore::RESPONSE_STATUS])
-    url = response[RestCore::RESPONSE_HEADERS]['LOCATION']
+    url = url.chomp
+    url = "#{d.defaults[:scheme]}#{url}" if url.start_with? '//'
+    response = d.request_full(
+      RestCore::REQUEST_METHOD => :head,
+      RestCore::REQUEST_PATH => url
+    )
+    if [301, 302, 303, 307].include? Integer(response[RestCore::RESPONSE_STATUS])
+      url = response[RestCore::RESPONSE_HEADERS]['LOCATION']
+    end
+    playlist.puts url
+
+    path = ".#{output}--#{File.basename(url)}"
+
+    list << {path: path, url: url}
   end
-
-  path = ".#{output}--#{File.basename(url)}"
-
-  list << {path: path, url: url}
 end
 list.uniq!
 
 downloaded = 0
-puts "downloading #{list.size} parts..."
+puts "\rdownloading #{list.size} parts..."
 list.each do |part|
   if File.exist? part[:path]
     downloaded += 1
@@ -74,7 +89,7 @@ list.each do |part|
 end
 RestCore::Down.wait
 
-puts "assembling parts..."
+puts "\rassembling parts..."
 File.open(output, 'ab') do |t|
   list.each do |part|
     IO.copy_stream(part[:path], t)

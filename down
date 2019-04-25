@@ -44,7 +44,7 @@ output = d.defaults[:output]
 
 print 'gathering parts...'
 list = []
-File.open("#{File.basename(d.defaults[:output])}.m3u8", "w") do |playlist|
+File.open("#{File.basename output}.m3u8", "w") do |playlist|
   d.get(
     d.defaults[:playlist_url]
   ).each_line do |url|
